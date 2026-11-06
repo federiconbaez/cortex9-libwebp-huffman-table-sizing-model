@@ -1,0 +1,15 @@
+case,version,alphabet,root_bits,tree,pre_extent,full_size,written,past_budget,label
+w01_single_symbol,pre,256,8,SINGLE,256,256,256,0,WITHIN
+w01_single_symbol,fix,256,8,SINGLE,256,256,256,0,EXACT_ALLOC
+w02_all_len8_full,pre,256,8,FULL,256,256,256,0,WITHIN
+w02_all_len8_full,fix,256,8,FULL,256,256,256,0,EXACT_ALLOC
+w03_two_symbols_full,pre,256,8,FULL,256,256,256,0,WITHIN
+w03_two_symbols_full,fix,256,8,FULL,256,256,256,0,EXACT_ALLOC
+w04_count_exceeds_level,pre,256,8,BAD_LENGTH,0,0,0,0,WITHIN
+w04_count_exceeds_level,fix,256,8,BAD_LENGTH,0,0,0,0,REJECTED_BEFORE_WRITE
+w05_search_incomplete_730,pre,256,8,INCOMPLETE,730,0,730,100,PAST_BUDGET
+w05_search_incomplete_730,fix,256,8,INCOMPLETE,730,0,0,0,REJECTED_BEFORE_WRITE
+w06_lengths_table_max7,pre,19,7,INCOMPLETE,128,0,128,0,WITHIN
+w06_lengths_table_max7,fix,19,7,INCOMPLETE,128,0,0,0,REJECTED_BEFORE_WRITE
+w07_full_deep,pre,256,8,FULL,384,384,384,0,WITHIN
+w07_full_deep,fix,256,8,FULL,384,384,384,0,EXACT_ALLOC
