@@ -120,11 +120,102 @@ static void practice(void) {
     CHECK(o.b.tree == CX9_BAD_LENGTH, "practice_level_8"); }
 }
 
+
+/* Adversarial inputs: API bounds, malformed histograms and parser input.
+ * Each must be refused (BAD_INPUT / BAD_LENGTH / parse error) with no UB:
+ * this file runs under ASan + UBSan with -fno-sanitize-recover. */
+static void test_adversarial(void) {
+  int cl[CX9_MAX_SYMBOLS + 1], c[15], i, v;
+  const int roots[] = {-1, 0, 15, 16, 31, 32, 1000};
+  cx9_build b;
+  cx9_outcome o;
+  for (i = 0; i < CX9_MAX_SYMBOLS + 1; ++i) cl[i] = 8;
+  for (i = 0; i < (int)(sizeof roots / sizeof roots[0]); ++i) {
+    b = cx9_build_table(cl, 256, roots[i]);
+    CHECK(b.tree == CX9_BAD_INPUT && b.pre_extent == 0, "adversarial root_bits");
+    memset(c, 0, sizeof c);
+    c[7] = 256;
+    for (v = 0; v < 2; ++v) {
+      o = cx9_run((cx9_version)v, c, 256, roots[i]);
+      CHECK(o.b.tree == CX9_BAD_INPUT && o.written == 0, "adversarial run root_bits");
+    }
+  }
+  CHECK(cx9_build_table(NULL, 10, 8).tree == CX9_BAD_INPUT, "adversarial NULL");
+  CHECK(cx9_build_table(cl, 0, 8).tree == CX9_BAD_INPUT, "adversarial n=0");
+  CHECK(cx9_build_table(cl, -5, 8).tree == CX9_BAD_INPUT, "adversarial n<0");
+  CHECK(cx9_build_table(cl, CX9_MAX_SYMBOLS + 1, 8).tree == CX9_BAD_INPUT, "adversarial n big");
+  /* the largest accepted input still runs: 4096 codes of length 12 = full */
+  for (i = 0; i < CX9_MAX_SYMBOLS; ++i) cl[i] = 12;
+  b = cx9_build_table(cl, CX9_MAX_SYMBOLS, 8);
+  CHECK(b.tree == CX9_FULL && b.full_size == 256 + 16 * 256, "adversarial max full");
+  /* deepest incomplete code at the root-bits extremes */
+  for (i = CX9_MIN_ROOT_BITS; i <= CX9_MAX_ROOT_BITS; ++i) {
+    int one[2] = {15, 0};
+    b = cx9_build_table(one, 2, i);
+    CHECK(b.tree == CX9_SINGLE, "adversarial single at every root");
+    one[1] = 15;
+    b = cx9_build_table(one, 2, i);
+    CHECK(b.tree == CX9_INCOMPLETE && b.pre_extent > 0, "adversarial deep incomplete");
+  }
+  cl[0] = -1;
+  CHECK(cx9_build_table(cl, 4, 8).tree == CX9_BAD_LENGTH, "adversarial length -1");
+  cl[0] = 16;
+  CHECK(cx9_build_table(cl, 4, 8).tree == CX9_BAD_LENGTH, "adversarial length 16");
+  cl[0] = 2147483647;
+  CHECK(cx9_build_table(cl, 4, 8).tree == CX9_BAD_LENGTH, "adversarial length INT_MAX");
+  /* counts summing past the alphabet */
+  memset(c, 0, sizeof c);
+  c[0] = 1;
+  c[14] = 4096;
+  o = cx9_run(CX9_PRE, c, 256, 8);
+  CHECK(o.b.tree == CX9_BAD_LENGTH && o.written == 0, "adversarial counts > alphabet");
+  memset(c, 0, sizeof c);
+  c[7] = -1;
+  c[8] = 257;
+  for (v = 0; v < 2; ++v) {
+    o = cx9_run((cx9_version)v, c, 256, 8);
+    CHECK(o.b.tree == CX9_BAD_LENGTH && o.written == 0, "adversarial negative count");
+  }
+  memset(c, 0, sizeof c);
+  c[7] = 2147483647;
+  CHECK(cx9_run(CX9_PRE, c, 256, 8).b.tree == CX9_BAD_LENGTH, "adversarial count INT_MAX");
+  memset(c, 0, sizeof c);
+  c[0] = 1; c[7] = 255;
+  CHECK(cx9_run(CX9_PRE, c, 256, 8).b.tree != CX9_BAD_INPUT, "sum == alphabet accepted");
+  c[0] = 2;
+  CHECK(cx9_run(CX9_PRE, c, 256, 8).b.tree == CX9_BAD_LENGTH, "sum == alphabet + 1 refused");
+  CHECK(!strcmp(cx9_tree_name((cx9_tree)99), "UNKNOWN"), "tree name out of range");
+  CHECK(!strcmp(cx9_label_name((cx9_label)-1), "UNKNOWN"), "label name out of range");
+  CHECK(cx9_run(CX9_PRE, NULL, 256, 8).b.tree == CX9_BAD_INPUT, "adversarial counts NULL");
+  CHECK(cx9_run(CX9_FIX, c, 0, 8).b.tree == CX9_BAD_INPUT, "adversarial alphabet 0");
+  /* parser */
+  {
+    const char *bad[] = {"", ",", "1,2", "0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+                         "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", "0,0,0,0,0,0,0,0,0,0,0,0,0,0,x",
+                         "0,0,0,0,0,0,0,0,0,0,0,0,0,0,-1", "0,0,0,0,0,0,0,0,0,0,0,0,0,0,4097",
+                         "0,0,0,0,0,0,0,0,0,0,0,0,0,0,99999999999999999999",
+                         ",0,0,0,0,0,0,0,0,0,0,0,0,0,0", "0,,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+                         "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,", " 0,0,0,0,0,0,0,0,0,0,0,0,0,0,1"};
+    int x;
+    for (i = 0; i < (int)(sizeof bad / sizeof bad[0]); ++i)
+      CHECK(cx9_parse_counts(bad[i], c) != 0, bad[i]);
+    CHECK(cx9_parse_counts(NULL, c) != 0, "parse NULL");
+    CHECK(cx9_parse_counts("0,0,0,0,0,0,0,256,0,0,0,0,0,0,0", c) == 0 && c[7] == 256,
+          "parse good");
+    CHECK(cx9_parse_int("8", 1, 14, &x) == 0 && x == 8, "parse_int good");
+    CHECK(cx9_parse_int("15", 1, 14, &x) != 0, "parse_int range");
+    CHECK(cx9_parse_int("8x", 1, 14, &x) != 0, "parse_int junk");
+    CHECK(cx9_parse_int("", 1, 14, &x) != 0, "parse_int empty");
+    CHECK(cx9_parse_int("-2147483649", -5, 5, &x) != 0, "parse_int overflow");
+  }
+}
+
 int main(int argc, char **argv) {
   test_fixtures(argc > 1 ? argv[1] : "fixtures");
   test_invariants();
   test_lengths_table_control();
   practice();
+  test_adversarial();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

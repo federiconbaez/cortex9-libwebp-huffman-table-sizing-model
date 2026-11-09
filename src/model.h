@@ -25,7 +25,15 @@ typedef struct {
   cx9_label label;
 } cx9_outcome;
 
+/* Returns tree CX9_BAD_INPUT for NULL counts, alphabet outside
+ * 1..CX9_MAX_SYMBOLS or root_bits outside CX9_MIN_ROOT_BITS..CX9_MAX_ROOT_BITS,
+ * and CX9_BAD_LENGTH for a negative count or counts summing past alphabet;
+ * all checked before any shift or write. */
 cx9_outcome cx9_run(cx9_version v, const int *counts15, int alphabet, int root_bits);
 const char *cx9_tree_name(cx9_tree t);
 const char *cx9_label_name(cx9_label l);
+/* Input parsing used by the CLI; exposed so the tests can drive it. */
+int cx9_parse_int(const char *s, int lo, int hi, int *out);
+int cx9_parse_counts(const char *s, int *c);
+
 #endif

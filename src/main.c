@@ -8,20 +8,6 @@
 #include <sys/stat.h>
 #include "model.h"
 
-static int parse_counts(const char *s, int *c) {
-  int i = 0;
-  char buf[256], *tok, *save = NULL;
-  if (strlen(s) >= sizeof buf) return -1;
-  strcpy(buf, s);
-  for (tok = strtok_r(buf, ",", &save); tok; tok = strtok_r(NULL, ",", &save)) {
-    char *end;
-    long v = strtol(tok, &end, 10);
-    if (*end || v < 0 || v > 4096 || i >= 15) return -1;
-    c[i++] = (int)v;
-  }
-  return i == 15 ? 0 : -1;
-}
-
 static void print_case(FILE *f, const char *name, const int *c, int alphabet, int root) {
   int v;
   for (v = 0; v < 2; ++v) {
@@ -42,7 +28,7 @@ static unsigned next_rand(void) {
 /* Random histograms with Kraft sum <= 1, lengths <= max_len. Reports the
  * largest PRE extent seen per tree kind. A search, not a proof of maximum. */
 static void search(FILE *f, int alphabet, int root, int max_len, long iters) {
-  int best[6] = {0}, bestc[6][15];
+  int best[CX9_BAD_INPUT + 1] = {0}, bestc[CX9_BAD_INPUT + 1][15];
   long it;
   memset(bestc, 0, sizeof bestc);
   for (it = 0; it < iters; ++it) {
@@ -68,7 +54,7 @@ static void search(FILE *f, int alphabet, int root, int max_len, long iters) {
   }
   {
     int t, l;
-    for (t = 0; t < 6; ++t) {
+    for (t = 0; t <= CX9_BAD_INPUT; ++t) {
       if (!best[t]) continue;
       fprintf(f, "%d,%d,%d,%ld,%s,%d,", alphabet, root, max_len, iters,
               cx9_tree_name((cx9_tree)t), best[t]);
@@ -87,15 +73,28 @@ static int results(const char *cases, const char *out) {
   if (!f) return 1;
   fprintf(f, "case,version,alphabet,root_bits,tree,pre_extent,full_size,written,past_budget,label\n");
   while (fgets(line, sizeof line, in)) {
-    char *name, *alpha, *root, *counts, *save = NULL;
-    int c[15];
+    char *name, *alpha, *root, *counts, *extra, *save = NULL;
+    int c[15], a, r;
+    size_t ln = strlen(line);
+    if (ln > 0 && line[ln - 1] != '\n' && !feof(in)) {
+      fprintf(stderr, "line too long\n");
+      fclose(in); fclose(f); return 1;
+    }
     if (line[0] == '#' || line[0] == '\n') continue;
     name = strtok_r(line, "\t", &save);
     alpha = strtok_r(NULL, "\t", &save);
     root = strtok_r(NULL, "\t", &save);
     counts = strtok_r(NULL, "\t\n", &save);
-    if (!name || !alpha || !root || !counts || parse_counts(counts, c)) return 1;
-    print_case(f, name, c, atoi(alpha), atoi(root));
+    if (!name || !alpha || !root || !counts ||
+        cx9_parse_int(alpha, 1, CX9_MAX_SYMBOLS, &a) ||
+        cx9_parse_int(root, CX9_MIN_ROOT_BITS, CX9_MAX_ROOT_BITS, &r) ||
+        cx9_parse_counts(counts, c)) {
+      fprintf(stderr, "malformed case line: %s\n", name ? name : "(empty)");
+      fclose(in); fclose(f); return 1;
+    }
+    extra = strtok_r(NULL, "\n", &save); /* the note column is free text */
+    (void)extra;
+    print_case(f, name, c, a, r);
   }
   fclose(in);
   fclose(f);
@@ -118,8 +117,11 @@ static int usage(void) {
 
 int main(int argc, char **argv) {
   if (argc == 5 && !strcmp(argv[1], "case")) {
-    int c[15], a = atoi(argv[2]), r = atoi(argv[3]);
-    if (parse_counts(argv[4], c) || a < 1 || a > 4096 || r < 1 || r > 10) return usage();
+    int c[15], a, r;
+    if (cx9_parse_int(argv[2], 1, CX9_MAX_SYMBOLS, &a) ||
+        cx9_parse_int(argv[3], CX9_MIN_ROOT_BITS, CX9_MAX_ROOT_BITS, &r) ||
+        cx9_parse_counts(argv[4], c))
+      return usage();
     printf("case,version,alphabet,root_bits,tree,pre_extent,full_size,written,past_budget,label\n");
     print_case(stdout, "cli", c, a, r);
     return 0;

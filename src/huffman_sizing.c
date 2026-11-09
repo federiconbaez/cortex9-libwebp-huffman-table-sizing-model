@@ -22,7 +22,7 @@ static int get_next_key(int key, int len) {
 
 cx9_build cx9_build_table(const int *code_lengths, int n, int root_bits) {
   cx9_build r;
-  int total = 1 << root_bits;
+  int total;
   int count[CX9_MAX_ALLOWED_CODE_LENGTH + 1] = {0};
   int offset[CX9_MAX_ALLOWED_CODE_LENGTH + 1];
   int len, s;
@@ -33,6 +33,12 @@ cx9_build cx9_build_table(const int *code_lengths, int n, int root_bits) {
   r.second_tables = 0;
   r.oversub_len = 0;
 
+  if (!code_lengths || n < 1 || n > CX9_MAX_SYMBOLS ||
+      root_bits < CX9_MIN_ROOT_BITS || root_bits > CX9_MAX_ROOT_BITS) {
+    r.tree = CX9_BAD_INPUT;
+    return r;
+  }
+  total = 1 << root_bits;
   /* histogram (lines 100-105): no write yet */
   for (s = 0; s < n; ++s) {
     if (code_lengths[s] < 0 || code_lengths[s] > CX9_MAX_ALLOWED_CODE_LENGTH)
@@ -89,6 +95,8 @@ cx9_build cx9_build_table(const int *code_lengths, int n, int root_bits) {
       }
       for (; count[len] > 0; --count[len]) {
         if ((key & mask) != low) {
+          /* at most CX9_MAX_SYMBOLS tables of at most 1 << 14 entries:
+           * total stays below 2^27, no int overflow */
           total += 1 << next_table_bit_size(count, len, root_bits);
           ++r.second_tables;
           low = key & mask;

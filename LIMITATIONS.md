@@ -22,3 +22,7 @@
   read.
 - This is not a finding. Nothing is attributed beyond the commit and the
   Chromium bug reference.
+- **Input domain:** the public API accepts root_bits 1..14, alphabets of
+  1..4096 symbols and counts 0..alphabet whose sum is at most the alphabet.
+  Anything else returns BAD_INPUT or BAD_LENGTH before any shift. libwebp
+  itself only uses root_bits 7 and 8; the wider range is a model choice.
