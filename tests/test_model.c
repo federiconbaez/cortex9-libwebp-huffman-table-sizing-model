@@ -198,7 +198,7 @@ static void test_adversarial(void) {
                          "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,", " 0,0,0,0,0,0,0,0,0,0,0,0,0,0,1"};
     int x;
     for (i = 0; i < (int)(sizeof bad / sizeof bad[0]); ++i)
-      CHECK(cx9_parse_counts(bad[i], c) != 0, bad[i]);
+      CHECK(cx9_parse_counts(bad[i], c) != 0, "%s", bad[i]);
     CHECK(cx9_parse_counts(NULL, c) != 0, "parse NULL");
     CHECK(cx9_parse_counts("0,0,0,0,0,0,0,256,0,0,0,0,0,0,0", c) == 0 && c[7] == 256,
           "parse good");
